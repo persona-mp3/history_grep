@@ -59,9 +59,9 @@ func main() {
 	defer db.Close()
 
 	// By default we just get the last 600 link visits
-	query := "select * from visited_links order by id desc limit (?)"
+	query := "SELECT * FROM visited_links ORDER BY id DESC LIMIT (?)"
 	if limit == 0 {
-		query = "select * from visited_links"
+		query = "SELECT * FROM visited_links"
 	}
 	rows, err := db.Query(query, limit)
 
