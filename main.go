@@ -113,7 +113,7 @@ func display(dump string) {
 		return
 	}
 
-	cmd := exec.Command("/opt/homebrew/bin/fzf")
+	cmd := exec.Command(fzfPath)
 	cmd.Stdin = strings.NewReader(dump)
 	cmd.Stdout = io.MultiWriter(os.Stdout, &outBuffer)
 
