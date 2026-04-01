@@ -43,6 +43,7 @@ func main() {
 	flag.StringVar(&pager, "pager", "fzf", descriptions["pager"])
 	flag.Uint64Var(&limit, "limit", DefaultLimit, descriptions["limit"])
 
+	flag.Parse()
 	fullPath := appendToHome(ChromeHistoryPath)
 	cmd := exec.Command("cp", fullPath, "./.chrome_history")
 	cmd.Stdout = os.Stdout
@@ -59,6 +60,9 @@ func main() {
 
 	// By default we just get the last 600 link visits
 	query := "select * from visited_links order by id desc limit (?)"
+	if limit == 0 {
+		query = "select * from visited_links"
+	}
 	rows, err := db.Query(query, limit)
 
 	if err != nil {
