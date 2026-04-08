@@ -11,5 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let _history = get_browsing_history(&config)?;
 
+    // TODO:
+    // [] Copy the history_file to a temp_dist 
+    // [] Parse with rustsqlite crate
     Ok(())
 }
