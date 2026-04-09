@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 home="0.5"
+rusqlite = "0.39.0"
