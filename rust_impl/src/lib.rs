@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -35,8 +36,11 @@ impl Config {
         })
     }
 }
-pub const CHROME_HISTORY_FILE: &'static str =
+pub const CHROME_HISTORY_FILE_MACOS: &'static str =
     "Library/Application Support/Google/Chrome/Default/History";
+
+// https://issarice.com/export-chrome-history
+pub const CHROME_HISTORY_FILE_LINUX: &'static str = ".config/google-chrome/Default/History";
 
 #[derive(Debug)]
 struct VisitedUrl {
@@ -47,21 +51,71 @@ struct VisitedUrl {
     visit_count: i32,
 }
 
-pub fn get_browsing_history(config: &Config) -> Result<&str, Box<dyn std::error::Error>> {
-    let file_path = match config.browser.as_str() {
-        "chrome" => CHROME_HISTORY_FILE,
-        _ => return Err("Browser not supported".into()),
+#[derive(Debug)]
+pub enum OSArch {
+    Linux,
+    MacOS,
+    Windows,
+    Unknown,
+}
+
+pub fn get_os() -> OSArch {
+    let user_os = env::consts::OS;
+    let os_arch: OSArch = match user_os {
+        "linux" => OSArch::Linux,
+        "macos" => OSArch::MacOS,
+        "windows" => OSArch::Windows,
+        _ => OSArch::Unknown,
     };
 
-    let homedir = home::home_dir().unwrap_or_else(|| PathBuf::from("~"));
+    os_arch
+}
 
-    let full_path = homedir.join(file_path);
+pub fn parse_browing_history(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    let os_arch = get_os();
 
-    let temp_file = PathBuf::from("temp_history.db");
-    Command::new("cp").args([&full_path, &temp_file]).output()?;
+    let browser_history_path: &str = match config.browser.as_str() {
+        "chrome" => match os_arch {
+            OSArch::Linux => CHROME_HISTORY_FILE_LINUX,
+            OSArch::Windows => "windows\\ path \\ to \\ chrome \\ history \\ file",
+            OSArch::MacOS => CHROME_HISTORY_FILE_MACOS,
+            OSArch::Unknown => return Err("Could not identify OS".into()),
+        },
 
-    // Docs: https://crates.io/crates/rusqlite/
-    let conn = Connection::open(&temp_file)?;
+        _ => return Err("Could not identify browser".into()),
+    };
+
+    let home_dir = match home::home_dir() {
+        Some(v) => v,
+        None => {
+            return Err("Could not get home directory".into());
+        }
+    };
+    let temp_file = PathBuf::from(".temp_chrome_history.db");
+    let browser_history_path = home_dir.join(&browser_history_path);
+
+    // NOTE: Do research if Rust translates it to Windows command
+    let exit_status = Command::new("cp")
+        .args([&browser_history_path, &temp_file])
+        .output()?;
+
+    if !exit_status.status.success() {
+        eprintln!("Failed to copy history file {:?}", browser_history_path);
+        let stderr_msg = exit_status.stderr;
+        return Err(String::from_utf8_lossy(&stderr_msg).into());
+    }
+
+    println!("Copy was successfull");
+    println!("exit_status -> {:?} ", exit_status);
+
+    let conn = match Connection::open(&temp_file) {
+        Ok(conn) => conn,
+        Err(err) => {
+            eprintln!("Could not open connection for file");
+            return Err(err.into());
+        }
+    };
+
     let mut stmt = conn.prepare("SELECT * FROM visited_links ORDER BY id DESC LIMIT (?1)")?;
     let visited_urls_iter = stmt.query_map([5i32], |row| {
         Ok(VisitedUrl {
@@ -77,6 +131,13 @@ pub fn get_browsing_history(config: &Config) -> Result<&str, Box<dyn std::error:
         println!("{:?}\n", url.unwrap());
     }
 
-    Command::new("rm").arg(&temp_file).output()?;
-    Ok("")
+    // Cleanup
+    let exit_status = Command::new("rm").arg(&temp_file).output()?;
+    if !exit_status.status.success() {
+        eprintln!("Failed to remove history file {:?}", temp_file);
+        let stderr_msg = exit_status.stderr;
+        return Err(String::from_utf8_lossy(&stderr_msg).into());
+    }
+
+    Ok(())
 }
