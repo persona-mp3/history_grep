@@ -186,7 +186,7 @@ pub fn collect_input(
 
     let mut all_urls: Vec<String> = vec![];
     for url in browsing_history {
-        all_urls.push(url.frame_url);
+        all_urls.push(url.top_level_url);
     }
 
     let all_urls = all_urls.join("\n");
