@@ -57,6 +57,12 @@ pub struct VisitedUrl {
     visit_count: i32,
 }
 
+// REVIEW:
+//  Would need to refactor this to collect other params, for example
+//  instead of just OS, it could also have the `history_path` and browser.exe
+//  So we could just use it as:
+//  parse_browing_histort(OSArch.history_path) -> Result<VistedUrl, Error>{}
+//  collect_input(v: Vec[VisitedUrl>, OSArch.browser_exe) -> Result<(), Error>{}
 #[derive(Debug)]
 pub enum OSArch {
     Linux(String),
@@ -219,7 +225,6 @@ pub fn collect_input(
     println!("User selected {}", buffer);
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
