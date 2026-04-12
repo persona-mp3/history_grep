@@ -112,8 +112,6 @@ pub fn copy_browing_history(config: &Config) -> Result<PathBuf, Box<dyn std::err
     }
 
     println!("Copy was successfull");
-    println!("exit_status -> {:?} ", exit_status);
-
     Ok(temp_file)
 }
 
@@ -151,13 +149,18 @@ pub fn parse_browsing_history(
 fn get_fzf(fzf: &String) -> Result<String, Box<dyn std::error::Error>> {
     // TODO: Come back to this bit!
     let exit_status = Command::new("which").arg(fzf).output()?;
-    if !exit_status.status.success() {
+    // if !exit_status.status.success() {
+    //     eprintln!("Could not get fzf_path for {}", fzf);
+    //     let stderr_msg = exit_status.stderr;
+    //     return Err(String::from_utf8_lossy(&stderr_msg).into());
+    // }
+
+    let stdout = String::from_utf8(exit_status.stdout)?;
+    if stdout.is_empty() {
         eprintln!("Could not get fzf_path for {}", fzf);
         let stderr_msg = exit_status.stderr;
         return Err(String::from_utf8_lossy(&stderr_msg).into());
     }
-
-    let stdout = String::from_utf8(exit_status.stdout)?;
     let stdout = stdout.trim().strip_suffix("\n");
 
     match stdout {
