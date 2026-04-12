@@ -24,6 +24,20 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Running Rust tests
+      - name: Run Rust tests
         run: cargo test
         working-directory: rust_impl
+
+   security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go, rust
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
