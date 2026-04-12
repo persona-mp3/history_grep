@@ -26,4 +26,4 @@ jobs:
 
       - name: Running Rust tests
         run: cargo test
-        working_dir: rust_impl
+        working-directory: rust_impl
