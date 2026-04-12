@@ -156,11 +156,11 @@ fn get_fzf(fzf: &String) -> Result<String, Box<dyn std::error::Error>> {
     // }
 
     let stdout = String::from_utf8(exit_status.stdout)?;
-    if stdout.is_empty() {
-        eprintln!("Could not get fzf_path for {}", fzf);
-        let stderr_msg = exit_status.stderr;
-        return Err(String::from_utf8_lossy(&stderr_msg).into());
-    }
+    // if stdout.is_empty() {
+    //     eprintln!("Could not get fzf_path for {}", fzf);
+    //     let stderr_msg = exit_status.stderr;
+    //     return Err(String::from_utf8_lossy(&stderr_msg).into());
+    // }
     let stdout = stdout.trim().strip_suffix("\n");
 
     match stdout {
