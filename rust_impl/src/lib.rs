@@ -118,6 +118,7 @@ pub fn copy_browing_history(config: &Config) -> Result<PathBuf, Box<dyn std::err
 /// Parses the browsing history from the temp_file path using sqlite, reading the rows into `VisitedUrl`
 pub fn parse_browsing_history(
     temp_file: &PathBuf,
+    limit: u32,
 ) -> Result<Vec<VisitedUrl>, Box<dyn std::error::Error>> {
     let conn = match Connection::open(&temp_file) {
         Ok(conn) => conn,
@@ -128,7 +129,7 @@ pub fn parse_browsing_history(
     };
 
     let mut stmt = conn.prepare("SELECT * FROM visited_links ORDER BY id DESC LIMIT (?1)")?;
-    let visited_urls_iter = stmt.query_map([5i32], |row| {
+    let visited_urls_iter = stmt.query_map([limit], |row| {
         Ok(VisitedUrl {
             id: row.get(0)?,
             link_url_id: row.get(1)?,
@@ -161,7 +162,7 @@ pub fn collect_input(
     temp_file: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let fzf_executable = get_fzf(&config.fzf)?;
-    let browsing_history = parse_browsing_history(temp_file)?;
+    let browsing_history = parse_browsing_history(temp_file, config.limit)?;
 
     // NOTE: I'd like it to panic here, so I can get a stack trace of what and where something
     // failed

@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let temp_file = copy_browing_history(&config)?;
-    rust_impl::parse_browsing_history(&temp_file)?;
+    rust_impl::parse_browsing_history(&temp_file, config.limit)?;
     rust_impl::collect_input(&config, &temp_file)?;
 
     rust_impl::cleanup(temp_file)?;
