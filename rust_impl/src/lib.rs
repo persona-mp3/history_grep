@@ -4,10 +4,10 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+use home;
 use rusqlite::{Connection, Result};
 
-use home;
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Config {
     pub browser: String,
     pub limit: u32,
@@ -26,17 +26,18 @@ impl Config {
     pub fn build(args: &[String]) -> Result<Config, Box<dyn std::error::Error>> {
         if args.len() < 4 {
             return Err("Not enough arguments\
-                hist <browser-name> <limit> <fzf>
-                "
-            .into());
+                hist <browser-name> <limit> <fzf>"
+                .into());
         }
 
-        let browser = &args[1];
+        let browser = args[1].clone();
         let limit = args[2].clone().trim().parse::<u32>()?;
+        let fzf = args[3].clone();
+
         Ok(Config {
-            browser: browser.clone(),
-            limit: limit,
-            fzf: String::from("fzf"),
+            browser,
+            limit,
+            fzf,
         })
     }
 }
@@ -47,6 +48,7 @@ pub const CHROME_HISTORY_FILE_MACOS: &'static str =
 pub const CHROME_HISTORY_FILE_LINUX: &'static str = ".config/google-chrome/Default/History";
 
 #[derive(Debug)]
+/// Table in sqlite format
 pub struct VisitedUrl {
     id: i32,
     link_url_id: i32,
@@ -57,19 +59,33 @@ pub struct VisitedUrl {
 
 #[derive(Debug)]
 pub enum OSArch {
-    Linux,
-    MacOS,
-    Windows,
-    Unsupported,
+    Linux(String),
+    MacOS(String),
+    Windows(String),
+    Unsupported(String),
+}
+
+impl OSArch {
+    fn value(&self) -> &str {
+        match self {
+            OSArch::Linux(s) => s,
+            OSArch::MacOS(s) => s,
+            OSArch::Windows(s) => s,
+            OSArch::Unsupported(s) => s,
+        }
+    }
 }
 
 pub fn get_os() -> OSArch {
     let user_os = env::consts::OS;
     let os_arch: OSArch = match user_os {
-        "linux" => OSArch::Linux,
-        "macos" => OSArch::MacOS,
-        "windows" => OSArch::Windows,
-        _ => OSArch::Unsupported,
+        "linux" => OSArch::Linux(String::from("linux")),
+        "macos" => OSArch::MacOS(String::from("macos")),
+        "windows" => OSArch::Windows(String::from("windows")),
+        _ => {
+            let msg = format!("{} is not yet supported. Feel free to make PRs!", user_os);
+            OSArch::Unsupported(msg)
+        }
     };
 
     os_arch
@@ -83,10 +99,10 @@ pub fn copy_browing_history(config: &Config) -> Result<PathBuf, Box<dyn std::err
 
     let browser_history_path: &str = match config.browser.as_str() {
         "chrome" => match os_arch {
-            OSArch::Linux => CHROME_HISTORY_FILE_LINUX,
-            OSArch::Windows => "windows\\ path \\ to \\ chrome \\ history \\ file",
-            OSArch::MacOS => CHROME_HISTORY_FILE_MACOS,
-            OSArch::Unsupported => return Err("Could not identify OS".into()),
+            OSArch::Linux(_) => CHROME_HISTORY_FILE_LINUX,
+            OSArch::Windows(_) => "windows\\ path \\ to \\ chrome \\ history \\ file",
+            OSArch::MacOS(_) => CHROME_HISTORY_FILE_MACOS,
+            OSArch::Unsupported(msg) => return Err(msg.into()),
         },
 
         _ => return Err("Could not identify browser".into()),
@@ -204,13 +220,61 @@ pub fn collect_input(
     Ok(())
 }
 
-pub fn cleanup(temp_file: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let exit_status = Command::new("rm").arg(&temp_file).output()?;
-    // NOTE: This is a 0 based exit status check?
-    if !exit_status.status.success() {
-        eprintln!("Failed to remove history file {:?}", temp_file);
-        let stderr_msg = exit_status.stderr;
-        return Err(String::from_utf8_lossy(&stderr_msg).into());
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    // Tested on x86
+    fn test_gets_os() {
+        let actual_os = env::consts::OS;
+        let expected_os = get_os();
+        assert_eq!(actual_os, expected_os.value());
     }
-    Ok(())
+
+    #[test]
+    fn test_default_config() {
+        let actual_result = Config::default();
+        let expected_config = Config {
+            browser: String::from("chrome"),
+            limit: 600,
+            fzf: String::from("fzf"),
+        };
+        assert_eq!(actual_result, expected_config)
+    }
+
+    #[test]
+    fn test_build_config() {
+        let args = vec![
+            String::from("executable-path"),
+            String::from("chrome"),
+            String::from("600"),
+            String::from("fzf"),
+        ];
+        let expected_config = Config {
+            browser: args[1].clone(),
+            limit: 600,
+            fzf: args[3].clone(),
+        };
+
+        let actual_config = Config::build(&args).unwrap();
+        assert_eq!(expected_config, actual_config)
+    }
+
+    #[test]
+    fn test_build_config_fails() {
+        let args = vec![
+            String::from("executable-path"),
+            String::from("chrome"),
+            String::from("fzf"),
+        ];
+
+        let expected_err_msg = "Not enough arguments\
+                                hist <browser-name> <limit> <fzf>";
+
+        // Would also want to test against stderr without 3rd party crates but it can cause problems when running on Windows.
+        let _ = Config::build(&args)
+            .inspect_err(|err| assert_eq!(err.to_string().trim(), expected_err_msg.trim(),));
+    }
 }
