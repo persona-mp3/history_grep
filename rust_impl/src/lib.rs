@@ -147,29 +147,13 @@ pub fn parse_browsing_history(
 }
 
 fn get_fzf(fzf: &String) -> Result<String, Box<dyn std::error::Error>> {
-    // TODO: Come back to this bit!
+    // TODO:(persona):
+    // 1. Check if commands were executed successfully
     let exit_status = Command::new("which").arg(fzf).output()?;
-    // if !exit_status.status.success() {
-    //     eprintln!("Could not get fzf_path for {}", fzf);
-    //     let stderr_msg = exit_status.stderr;
-    //     return Err(String::from_utf8_lossy(&stderr_msg).into());
-    // }
-
     let stdout = String::from_utf8(exit_status.stdout)?;
-    // if stdout.is_empty() {
-    //     eprintln!("Could not get fzf_path for {}", fzf);
-    //     let stderr_msg = exit_status.stderr;
-    //     return Err(String::from_utf8_lossy(&stderr_msg).into());
-    // }
-    let stdout = stdout.trim().strip_suffix("\n");
+    let stdout = stdout.trim_end();
 
-    match stdout {
-        Some(s) => Ok(s.to_string()),
-        None => {
-            eprintln!("Could not get executable path for fzf: {}", fzf);
-            Err("Could not get fzf path".into())
-        }
-    }
+    Ok(stdout.to_string())
 }
 
 pub fn collect_input(
@@ -221,6 +205,7 @@ pub fn collect_input(
 
 pub fn cleanup(temp_file: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let exit_status = Command::new("rm").arg(&temp_file).output()?;
+    // NOTE: This is a 0 based exit status check?
     if !exit_status.status.success() {
         eprintln!("Failed to remove history file {:?}", temp_file);
         let stderr_msg = exit_status.stderr;
