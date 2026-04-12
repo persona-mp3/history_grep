@@ -60,7 +60,7 @@ pub enum OSArch {
     Linux,
     MacOS,
     Windows,
-    Unknown,
+    Unsupported,
 }
 
 pub fn get_os() -> OSArch {
@@ -69,7 +69,7 @@ pub fn get_os() -> OSArch {
         "linux" => OSArch::Linux,
         "macos" => OSArch::MacOS,
         "windows" => OSArch::Windows,
-        _ => OSArch::Unknown,
+        _ => OSArch::Unsupported,
     };
 
     os_arch
@@ -86,7 +86,7 @@ pub fn copy_browing_history(config: &Config) -> Result<PathBuf, Box<dyn std::err
             OSArch::Linux => CHROME_HISTORY_FILE_LINUX,
             OSArch::Windows => "windows\\ path \\ to \\ chrome \\ history \\ file",
             OSArch::MacOS => CHROME_HISTORY_FILE_MACOS,
-            OSArch::Unknown => return Err("Could not identify OS".into()),
+            OSArch::Unsupported => return Err("Could not identify OS".into()),
         },
 
         _ => return Err("Could not identify browser".into()),
