@@ -41,11 +41,6 @@ impl Config {
         })
     }
 }
-pub const CHROME_HISTORY_FILE_MACOS: &'static str =
-    "Library/Application Support/Google/Chrome/Default/History";
-
-// https://issarice.com/export-chrome-history
-pub const CHROME_HISTORY_FILE_LINUX: &'static str = ".config/google-chrome/Default/History";
 
 #[derive(Debug)]
 /// Table in sqlite format
@@ -71,6 +66,13 @@ pub enum OSArch {
     Unsupported(String),
 }
 
+// Would need a better name for this
+pub struct OsInfo {
+    os_arch: OSArch,
+    browser_history_path: PathBuf,
+    browser_exec: PathBuf,
+}
+
 impl OSArch {
     fn value(&self) -> &str {
         match self {
@@ -82,7 +84,7 @@ impl OSArch {
     }
 }
 
-pub fn get_os() -> OSArch {
+pub fn get_system_os() -> OSArch {
     let user_os = env::consts::OS;
     let os_arch: OSArch = match user_os {
         "linux" => OSArch::Linux(String::from("linux")),
@@ -97,31 +99,70 @@ pub fn get_os() -> OSArch {
     os_arch
 }
 
+pub const CHROME_HISTORY_FILE_MACOS: &'static str =
+    "Library/Application Support/Google/Chrome/Default/History";
+
+// https://issarice.com/export-chrome-history
+pub const CHROME_HISTORY_FILE_LINUX: &'static str = ".config/google-chrome/Default/History";
+
+const CHROME_EXEC_PATH_MACOS: &'static str =
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME_EXEC_FILE_LINUX: &'static str = "/usr/bin/google-chrome";
+
+pub const TEMP_FILE: &'static str = ".temp_chrome_history.db";
+
+pub fn get_browser_info(config: &Config) -> Result<OsInfo, Box<dyn std::error::Error>> {
+    let os_arch = get_system_os();
+    let mut browser_history_path = PathBuf::new();
+    let mut browser_exec = PathBuf::new();
+    match config.browser.as_str() {
+        "chrome" => {
+            match &os_arch {
+                OSArch::Linux(_) => {
+                    browser_history_path.push(CHROME_HISTORY_FILE_LINUX);
+                    browser_exec.push(CHROME_EXEC_FILE_LINUX)
+                }
+                OSArch::MacOS(_) => {
+                    browser_history_path.push(CHROME_HISTORY_FILE_MACOS);
+                    browser_exec.push(CHROME_EXEC_PATH_MACOS)
+                }
+                OSArch::Windows(_) => {
+                    browser_history_path.push("Windows has not yet been developed")
+                }
+                OSArch::Unsupported(msg) => browser_history_path.push(msg),
+            };
+        }
+
+        _ => {
+            let err_msg = format!(
+                "{} has not yet been supported, PR's are welcome!",
+                config.browser
+            );
+            return Err(err_msg.into());
+        }
+    }
+
+    Ok(OsInfo {
+        os_arch,
+        browser_history_path,
+        browser_exec,
+    })
+}
+
 /// Matches the OS the application is running on an automatically resolves the possible file-path
 /// of the browser. If successful, it returns the temporary  file path, as `.temp_chrome_history.db`
 /// Callers need to call `cleanup()` to delete the file
-pub fn copy_browing_history(config: &Config) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let os_arch = get_os();
-
-    let browser_history_path: &str = match config.browser.as_str() {
-        "chrome" => match os_arch {
-            OSArch::Linux(_) => CHROME_HISTORY_FILE_LINUX,
-            OSArch::Windows(_) => "windows\\ path \\ to \\ chrome \\ history \\ file",
-            OSArch::MacOS(_) => CHROME_HISTORY_FILE_MACOS,
-            OSArch::Unsupported(msg) => return Err(msg.into()),
-        },
-
-        _ => return Err("Could not identify browser".into()),
-    };
-
+pub fn copy_browing_history(config: &Config) -> Result<OsInfo, Box<dyn std::error::Error>> {
+    let info = get_browser_info(config)?;
     let home_dir = match home::home_dir() {
         Some(v) => v,
         None => {
             return Err("Could not get home directory".into());
         }
     };
-    let temp_file = PathBuf::from(".temp_chrome_history.db");
-    let browser_history_path = home_dir.join(&browser_history_path);
+
+    let temp_file = PathBuf::from(TEMP_FILE);
+    let browser_history_path = home_dir.join(&info.browser_history_path);
 
     let exit_status = Command::new("cp")
         .args([&browser_history_path, &temp_file])
@@ -133,16 +174,14 @@ pub fn copy_browing_history(config: &Config) -> Result<PathBuf, Box<dyn std::err
         return Err(String::from_utf8_lossy(&stderr_msg).into());
     }
 
-    println!("Copy was successfull");
-    Ok(temp_file)
+    Ok(info)
 }
 
 /// Parses the browsing history from the temp_file path using sqlite, reading the rows into `VisitedUrl`
 pub fn parse_browsing_history(
-    temp_file: &PathBuf,
-    limit: u32,
+    search_limit: u32,
 ) -> Result<Vec<VisitedUrl>, Box<dyn std::error::Error>> {
-    let conn = match Connection::open(&temp_file) {
+    let conn = match Connection::open(TEMP_FILE) {
         Ok(conn) => conn,
         Err(err) => {
             eprintln!("Could not open connection for file");
@@ -151,7 +190,7 @@ pub fn parse_browsing_history(
     };
 
     let mut stmt = conn.prepare("SELECT * FROM visited_links ORDER BY id DESC LIMIT (?1)")?;
-    let visited_urls_iter = stmt.query_map([limit], |row| {
+    let visited_urls_iter = stmt.query_map([search_limit], |row| {
         Ok(VisitedUrl {
             id: row.get(0)?,
             link_url_id: row.get(1)?,
@@ -179,15 +218,14 @@ fn get_fzf(fzf: &String) -> Result<String, Box<dyn std::error::Error>> {
     Ok(stdout.to_string())
 }
 
-pub fn collect_input(
-    config: &Config,
-    temp_file: &PathBuf,
-) -> Result<(), Box<dyn std::error::Error>> {
+/// Sends a number of target links from the database into fzf and wait's for user
+/// input. It panics when there are errors in piping stdout and stin processes of
+/// fzf. When done, it returns the target link the user wants to visit
+pub fn collect_target_link(config: &Config) -> Result<String, Box<dyn std::error::Error>> {
     let fzf_executable = get_fzf(&config.fzf)?;
-    let browsing_history = parse_browsing_history(temp_file, config.limit)?;
+    let browsing_history = parse_browsing_history(config.limit)?;
 
-    // NOTE: I'd like it to panic here, so I can get a stack trace of what and where something
-    // failed
+    // I'd like it to panic here, so I can get a stack trace of what and where something failed
     let mut fzf_process = Command::new(fzf_executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -223,7 +261,7 @@ pub fn collect_input(
         .expect("Could not read from fzfs stdout!");
 
     println!("User selected {}", buffer);
-    Ok(())
+    Ok(buffer)
 }
 
 #[cfg(test)]
@@ -234,7 +272,7 @@ mod tests {
     // Tested on x86
     fn test_gets_os() {
         let actual_os = env::consts::OS;
-        let expected_os = get_os();
+        let expected_os = get_system_os();
         assert_eq!(actual_os, expected_os.value());
     }
 

@@ -36,11 +36,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Config::default()
     };
 
-    let temp_file = copy_browing_history(&config)?;
-    let _cleanup = TempFile::new(&temp_file);
-    rust_impl::parse_browsing_history(&temp_file, config.limit)?;
-    rust_impl::collect_input(&config, &temp_file)?;
+    let _browser_info = copy_browing_history(&config)?;
+    let _cleanup = TempFile::new(rust_impl::TEMP_FILE);
+    let _target_link = rust_impl::collect_target_link(&config)?;
 
-    // rust_impl::cleanup(temp_file)?;
     Ok(())
 }
