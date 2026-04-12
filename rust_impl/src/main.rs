@@ -1,5 +1,27 @@
 use rust_impl::{Config, copy_browing_history};
 use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+pub struct TempFile(PathBuf);
+
+impl TempFile {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        TempFile(path.into())
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        if self.0.exists() {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+}
 
 // NOTE: If you're on a linux distro, you need to install sqlite so the application
 // can interface with it. Spefically this was built on a late night cafee, on debian distro
@@ -15,13 +37,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let temp_file = copy_browing_history(&config)?;
+    let _cleanup = TempFile::new(&temp_file);
     rust_impl::parse_browsing_history(&temp_file, config.limit)?;
     rust_impl::collect_input(&config, &temp_file)?;
 
-    rust_impl::cleanup(temp_file)?;
-
-    // TODO:
-    // [] Pipe content to fzf
-    // [] Collect output from fzf and use it to open browser
+    // rust_impl::cleanup(temp_file)?;
     Ok(())
 }
